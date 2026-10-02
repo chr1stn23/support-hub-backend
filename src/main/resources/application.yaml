@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: support-hub-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/supporthub}
+    username: ${DATABASE_USERNAME:supporthub}
+    password: ${DATABASE_PASSWORD:supporthub}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
