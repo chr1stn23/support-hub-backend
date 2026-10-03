@@ -1,6 +1,8 @@
 spring:
   application:
     name: support-hub-backend
+  profiles:
+    active: local
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/supporthub}
     username: ${DATABASE_USERNAME:supporthub}
@@ -24,3 +26,12 @@ spring:
 
 server:
   port: 8080
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:DyXOD3yLdP8ZWR5HeiyqML3FP9mok3Nwp28UEJHDzbU}
+      expiration-minutes: 60
+      issuer: supporthub
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
