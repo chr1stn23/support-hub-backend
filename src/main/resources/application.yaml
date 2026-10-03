@@ -27,6 +27,10 @@ spring:
 server:
   port: 8080
 
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+
 app:
   security:
     jwt:
