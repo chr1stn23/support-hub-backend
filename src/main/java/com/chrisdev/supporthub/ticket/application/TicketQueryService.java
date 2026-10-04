@@ -76,6 +76,9 @@ public class TicketQueryService {
         if (Boolean.TRUE.equals(criteria.unassigned())) {
             spec = spec.and(TicketSpecifications.unassigned());
         }
+        if (criteria.assetId() != null) {
+            spec = spec.and(TicketSpecifications.forAsset(criteria.assetId()));
+        }
         if (criteria.search() != null && !criteria.search().isBlank()) {
             String text = criteria.search().trim();
             if (text.length() > MAX_SEARCH_LENGTH) {

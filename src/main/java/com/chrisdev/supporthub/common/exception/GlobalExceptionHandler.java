@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -57,10 +58,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ApiError> handleOptimisticLock(
-            org.springframework.dao.OptimisticLockingFailureException ex, HttpServletRequest request) {
+            OptimisticLockingFailureException ex, HttpServletRequest request) {
         ApiError body = ApiError.of(409, ErrorCode.CONCURRENT_MODIFICATION.name(),
                 "The resource was modified by someone else. Reload it and try again.",
                 request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex,
+            HttpServletRequest request) {
+        // El detalle puede contener datos internos: va al log, no al cliente
+        log.warn("Data integrity violation on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        ApiError body = ApiError.of(409, ErrorCode.CONFLICT.name(),
+                "The operation conflicts with existing data.", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 

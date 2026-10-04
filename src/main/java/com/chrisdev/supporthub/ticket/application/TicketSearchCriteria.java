@@ -11,6 +11,7 @@ public record TicketSearchCriteria(
         UUID categoryId,
         UUID assignedTo,
         Boolean unassigned,
+        UUID assetId,
         String search
 ) {
 }

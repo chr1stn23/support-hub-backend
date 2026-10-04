@@ -52,10 +52,11 @@ public class TicketController {
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) UUID assignedTo,
             @RequestParam(required = false) Boolean unassigned,
+            @RequestParam(required = false) UUID assetId,
             @RequestParam(required = false) String search,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @AuthenticationPrincipal Jwt jwt) {
-        var criteria = new TicketSearchCriteria(status, priority, categoryId, assignedTo, unassigned, search);
+        var criteria = new TicketSearchCriteria(status, priority, categoryId, assignedTo, unassigned, assetId, search);
         return queryService.search(criteria, pageable, AuthenticatedUser.from(jwt));
     }
 

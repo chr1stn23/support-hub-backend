@@ -43,6 +43,10 @@ public final class TicketSpecifications {
         return (root, query, cb) -> cb.isNull(root.get("agent"));
     }
 
+    public static Specification<Ticket> forAsset(UUID assetId) {
+        return (root, query, cb) -> cb.equal(root.get("asset").get("id"), assetId);
+    }
+
     /**
      * Busca el texto en título, descripción o código del ticket (sin distinguir mayúsculas).
      */
