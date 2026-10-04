@@ -1,6 +1,8 @@
 package com.chrisdev.supporthub.ticket.domain;
 
 import com.chrisdev.supporthub.asset.domain.Asset;
+import com.chrisdev.supporthub.common.exception.BusinessException;
+import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.user.domain.User;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -143,5 +145,75 @@ public class Ticket {
 
     public Long getVersion() {
         return version;
+    }
+
+    // Comportamiento de dominio
+    public boolean isLocked() {
+        return status == TicketStatus.CLOSED || status == TicketStatus.CANCELLED;
+    }
+
+    public boolean isAssignable() {
+        return status == TicketStatus.OPEN
+                || status == TicketStatus.IN_PROGRESS
+                || status == TicketStatus.WAITING;
+    }
+
+    /**
+     * @return true si el estado cambió (OPEN pasa a IN_PROGRESS al asignarse)
+     */
+    public boolean assignTo(User newAgent) {
+        this.agent = newAgent;
+        if (status == TicketStatus.OPEN) {
+            status = TicketStatus.IN_PROGRESS;
+            return true;
+        }
+        return false;
+    }
+
+    public void changeStatus(TicketStatus target) {
+        if (!status.canTransitionTo(target)) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "A ticket cannot move from %s to %s.".formatted(status, target));
+        }
+
+        if (target == TicketStatus.IN_PROGRESS && agent == null) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "Assign the ticket to an agent before moving it to IN_PROGRESS.");
+        }
+
+        Instant now = Instant.now();
+        switch (target) {
+            case RESOLVED -> resolvedAt = now;
+            case CLOSED -> closedAt = now;
+            case IN_PROGRESS -> {
+                if (status == TicketStatus.RESOLVED) {
+                    resolvedAt = null; // reapertura
+                }
+            }
+            default -> {
+            }
+        }
+
+        this.status = target;
+    }
+
+    public void changeTitle(String title) {
+        this.title = title.trim();
+    }
+
+    public void changeDescription(String description) {
+        this.description = description.trim();
+    }
+
+    public void changePriority(TicketPriority priority) {
+        this.priority = priority;
+    }
+
+    public void changeCategory(Category category) {
+        this.category = category;
+    }
+
+    public void linkAsset(Asset asset) {
+        this.asset = asset;
     }
 }

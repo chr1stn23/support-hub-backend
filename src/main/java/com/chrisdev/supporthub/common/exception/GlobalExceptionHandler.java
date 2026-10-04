@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -52,6 +53,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ApiError body = ApiError.of(403, ErrorCode.FORBIDDEN.name(),
                 "You do not have permission to perform this action.", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> handleOptimisticLock(
+            org.springframework.dao.OptimisticLockingFailureException ex, HttpServletRequest request) {
+        ApiError body = ApiError.of(409, ErrorCode.CONCURRENT_MODIFICATION.name(),
+                "The resource was modified by someone else. Reload it and try again.",
+                request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     // Último recurso

@@ -35,6 +35,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         seed("admin@supporthub.local", "Ana Admin", RoleName.ADMIN);
         seed("agent@supporthub.local", "Carlos Agente", RoleName.AGENT);
+        seed("agent2@supporthub.local", "Elena Agente", RoleName.AGENT);
         seed("user@supporthub.local", "Lucía Usuaria", RoleName.USER);
         seed("assets@supporthub.local", "Mario Activos", RoleName.ASSET_MANAGER);
     }

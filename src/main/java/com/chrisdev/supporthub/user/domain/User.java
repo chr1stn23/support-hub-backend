@@ -64,6 +64,10 @@ public class User {
         return roles.stream().map(r -> r.getName().name()).sorted().toList();
     }
 
+    public boolean hasRole(RoleName role) {
+        return roles.stream().anyMatch(r -> r.getName() == role);
+    }
+
     public UUID getId() {
         return id;
     }

@@ -4,11 +4,14 @@ package com.chrisdev.supporthub.ticket.application;
 import com.chrisdev.supporthub.common.api.PageResponse;
 import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
-import com.chrisdev.supporthub.common.exception.ResourceNotFoundException;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
+import com.chrisdev.supporthub.ticket.api.CommentResponse;
+import com.chrisdev.supporthub.ticket.api.HistoryResponse;
 import com.chrisdev.supporthub.ticket.api.TicketResponse;
 import com.chrisdev.supporthub.ticket.api.TicketSummaryResponse;
 import com.chrisdev.supporthub.ticket.domain.Ticket;
+import com.chrisdev.supporthub.ticket.infrastructure.TicketCommentRepository;
+import com.chrisdev.supporthub.ticket.infrastructure.TicketHistoryRepository;
 import com.chrisdev.supporthub.ticket.infrastructure.TicketRepository;
 import com.chrisdev.supporthub.ticket.infrastructure.TicketSpecifications;
 import org.springframework.data.domain.Page;
@@ -18,6 +21,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,10 +35,18 @@ public class TicketQueryService {
 
     private final TicketRepository ticketRepository;
     private final TicketAccessPolicy accessPolicy;
+    private final TicketLookup lookup;
+    private final TicketCommentRepository commentRepository;
+    private final TicketHistoryRepository historyRepository;
 
-    public TicketQueryService(TicketRepository ticketRepository, TicketAccessPolicy accessPolicy) {
+    public TicketQueryService(TicketRepository ticketRepository, TicketAccessPolicy accessPolicy,
+            TicketLookup lookup, TicketCommentRepository commentRepository,
+            TicketHistoryRepository historyRepository) {
         this.ticketRepository = ticketRepository;
         this.accessPolicy = accessPolicy;
+        this.lookup = lookup;
+        this.commentRepository = commentRepository;
+        this.historyRepository = historyRepository;
     }
 
     public PageResponse<TicketSummaryResponse> search(
@@ -78,11 +90,21 @@ public class TicketQueryService {
     }
 
     public TicketResponse getById(UUID id, AuthenticatedUser user) {
-        Ticket ticket = ticketRepository.findDetailById(id)
-                .filter(t -> accessPolicy.canView(user, t))
-                // 404 tanto si no existe como si no tiene permiso: no revelar que existe
-                .orElseThrow(() -> new ResourceNotFoundException("Ticket", id));
-        return TicketResponse.from(ticket);
+        return TicketResponse.from(lookup.requireVisible(id, user));
+    }
+
+    public List<CommentResponse> getComments(UUID ticketId, AuthenticatedUser user) {
+        lookup.requireVisible(ticketId, user);
+        return commentRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
+                .map(CommentResponse::from)
+                .toList();
+    }
+
+    public List<HistoryResponse> getHistory(UUID ticketId, AuthenticatedUser user) {
+        lookup.requireVisible(ticketId, user);
+        return historyRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
+                .map(HistoryResponse::from)
+                .toList();
     }
 
     private void validateSort(Pageable pageable) {
