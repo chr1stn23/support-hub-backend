@@ -72,8 +72,9 @@ public class AssetController {
 
     @PostMapping
     @PreAuthorize(MANAGERS)
-    public ResponseEntity<AssetResponse> create(@Valid @RequestBody CreateAssetRequest request) {
-        AssetResponse created = commandService.register(request);
+    public ResponseEntity<AssetResponse> create(@Valid @RequestBody CreateAssetRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        AssetResponse created = commandService.register(request, AuthenticatedUser.from(jwt));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(created.id()).toUri();
         return ResponseEntity.created(location).body(created);
@@ -81,8 +82,9 @@ public class AssetController {
 
     @PatchMapping("/{id}")
     @PreAuthorize(MANAGERS)
-    public AssetResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateAssetRequest request) {
-        return commandService.update(id, request);
+    public AssetResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateAssetRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return commandService.update(id, request, AuthenticatedUser.from(jwt));
     }
 
     @PostMapping("/{id}/assign")
@@ -101,14 +103,15 @@ public class AssetController {
 
     @PostMapping("/{id}/return")
     @PreAuthorize(MANAGERS)
-    public AssetResponse returnAsset(@PathVariable UUID id) {
-        return commandService.returnAsset(id);
+    public AssetResponse returnAsset(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return commandService.returnAsset(id, AuthenticatedUser.from(jwt));
     }
 
     @PostMapping("/{id}/status")
     @PreAuthorize(MANAGERS)
     public AssetResponse changeStatus(@PathVariable UUID id,
-            @Valid @RequestBody ChangeAssetStatusRequest request) {
-        return commandService.changeStatus(id, request);
+            @Valid @RequestBody ChangeAssetStatusRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return commandService.changeStatus(id, request, AuthenticatedUser.from(jwt));
     }
 }

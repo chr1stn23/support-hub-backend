@@ -2,6 +2,7 @@ package com.chrisdev.supporthub.auth.api;
 
 import com.chrisdev.supporthub.auth.application.AuthService;
 import com.chrisdev.supporthub.user.api.UserResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -20,8 +21,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request.email(), request.password());
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        return authService.login(request.email(), request.password(), httpRequest.getRemoteAddr());
     }
 
     @GetMapping("/me")

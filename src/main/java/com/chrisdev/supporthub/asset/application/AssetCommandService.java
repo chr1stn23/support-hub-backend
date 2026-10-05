@@ -8,11 +8,17 @@ import com.chrisdev.supporthub.asset.domain.AssetType;
 import com.chrisdev.supporthub.asset.infrastructure.AssetAssignmentRepository;
 import com.chrisdev.supporthub.asset.infrastructure.AssetRepository;
 import com.chrisdev.supporthub.asset.infrastructure.AssetTypeRepository;
+import com.chrisdev.supporthub.audit.application.AuditMetadata;
+import com.chrisdev.supporthub.audit.application.AuditService;
+import com.chrisdev.supporthub.audit.domain.AuditAction;
+import com.chrisdev.supporthub.audit.domain.AuditEntityType;
 import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.common.exception.ResourceNotFoundException;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
 import com.chrisdev.supporthub.common.util.Texts;
+import com.chrisdev.supporthub.notification.application.NotificationService;
+import com.chrisdev.supporthub.notification.domain.NotificationType;
 import com.chrisdev.supporthub.user.domain.User;
 import com.chrisdev.supporthub.user.infrastructure.UserRepository;
 import org.slf4j.Logger;
@@ -22,10 +28,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class AssetCommandService {
@@ -34,15 +37,19 @@ public class AssetCommandService {
     private static final String ACTIVE_ASSIGNMENT_INDEX = "uq_asset_assignments_active";
     private static final String SERIAL_INDEX = "uq_assets_serial";
 
+    private final AuditService audit;
+    private final NotificationService notifications;
     private final AssetRepository assetRepository;
     private final AssetTypeRepository assetTypeRepository;
     private final AssetAssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
 
-    public AssetCommandService(AssetRepository assetRepository,
+    public AssetCommandService(AuditService audit, NotificationService notifications, AssetRepository assetRepository,
             AssetTypeRepository assetTypeRepository,
             AssetAssignmentRepository assignmentRepository,
             UserRepository userRepository) {
+        this.audit = audit;
+        this.notifications = notifications;
         this.assetRepository = assetRepository;
         this.assetTypeRepository = assetTypeRepository;
         this.assignmentRepository = assignmentRepository;
@@ -66,7 +73,7 @@ public class AssetCommandService {
 
     // Alta
     @Transactional
-    public AssetResponse register(CreateAssetRequest request) {
+    public AssetResponse register(CreateAssetRequest request, AuthenticatedUser actor) {
         AssetType type = findActiveType(request.assetTypeId());
         String serial = normalizeSerial(request.serialNumber());
         ensureSerialIsFree(serial, null);
@@ -78,12 +85,16 @@ public class AssetCommandService {
                 Texts.blankToNull(request.location()));
 
         saveCatchingDuplicateSerial(asset);
+
+        audit.record(actor.id(), AuditAction.ASSET_CREATED, AuditEntityType.ASSET, asset.getId(),
+                AuditMetadata.of("assetTag", asset.getAssetTag(), "type", type.getName()));
+
         return AssetResponse.from(asset, null);
     }
 
     // Edición
     @Transactional
-    public AssetResponse update(UUID assetId, UpdateAssetRequest request) {
+    public AssetResponse update(UUID assetId, UpdateAssetRequest request, AuthenticatedUser actor) {
         Asset asset = requireAsset(assetId);
 
         if (!request.hasChanges()) {
@@ -92,34 +103,46 @@ public class AssetCommandService {
         if (asset.isRetired()) {
             throw new BusinessException(ErrorCode.ASSET_RETIRED, "A retired asset can no longer be edited.");
         }
-        // Control explícito: ¿el cliente editó sobre la versión que sigue vigente?
         if (!Objects.equals(asset.getVersion(), request.version())) {
             throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION,
                     "The asset was modified by someone else. Reload it and try again.");
         }
 
+        List<String> changed = new ArrayList<>();
+
         if (request.assetTypeId() != null
                 && !request.assetTypeId().equals(asset.getAssetType().getId())) {
             asset.changeType(findActiveType(request.assetTypeId()));
+            changed.add("assetType");
         }
         if (request.brand() != null) {
             asset.changeBrand(Texts.requireText("brand", request.brand()));
+            changed.add("brand");
         }
         if (request.model() != null) {
             asset.changeModel(Texts.requireText("model", request.model()));
+            changed.add("model");
         }
         if (request.serialNumber() != null) {
-            String serial = normalizeSerial(request.serialNumber());   // "" borra el valor
+            String serial = normalizeSerial(request.serialNumber());
             if (!Objects.equals(serial, asset.getSerialNumber())) {
                 ensureSerialIsFree(serial, asset.getId());
                 asset.changeSerialNumber(serial);
+                changed.add("serialNumber");
             }
         }
         if (request.location() != null) {
-            asset.changeLocation(Texts.blankToNull(request.location()));   // "" borra el valor
+            asset.changeLocation(Texts.blankToNull(request.location()));
+            changed.add("location");
         }
 
         saveCatchingDuplicateSerial(asset);
+
+        if (!changed.isEmpty()) {
+            audit.record(actor.id(), AuditAction.ASSET_UPDATED, AuditEntityType.ASSET, asset.getId(),
+                    AuditMetadata.of("assetTag", asset.getAssetTag(), "fields", changed));
+        }
+
         return AssetResponse.from(asset, currentAssignment(assetId).orElse(null));
     }
 
@@ -148,6 +171,14 @@ public class AssetCommandService {
         } catch (OptimisticLockingFailureException ex) {
             throw lostTheRace(assetId);
         }
+
+        audit.record(actor.id(), AuditAction.ASSET_ASSIGNED, AuditEntityType.ASSET, asset.getId(),
+                AuditMetadata.of("assetTag", asset.getAssetTag(), "assignedTo", assignee.getFullName()));
+        notifications.notifyUsers(NotificationType.ASSET_ASSIGNED,
+                "Asset %s (%s %s) was assigned to you".formatted(asset.getAssetTag(), asset.getBrand(),
+                        asset.getModel()),
+                null, actor.id(), List.of(assignee.getId()));
+
         return AssetResponse.from(asset, assignment);
     }
 
@@ -180,11 +211,20 @@ public class AssetCommandService {
         } catch (OptimisticLockingFailureException ex) {
             throw lostTheRace(assetId);
         }
+
+        audit.record(actor.id(), AuditAction.ASSET_TRANSFERRED, AuditEntityType.ASSET, asset.getId(),
+                AuditMetadata.of("assetTag", asset.getAssetTag(),
+                        "from", current.getUser().getFullName(), "to", newHolder.getFullName()));
+        notifications.notifyUsers(NotificationType.ASSET_TRANSFERRED,
+                "Asset %s was transferred from %s to %s".formatted(asset.getAssetTag(),
+                        current.getUser().getFullName(), newHolder.getFullName()),
+                null, actor.id(), List.of(current.getUser().getId(), newHolder.getId()));
+
         return AssetResponse.from(asset, next);
     }
 
     @Transactional
-    public AssetResponse returnAsset(UUID assetId) {
+    public AssetResponse returnAsset(UUID assetId, AuthenticatedUser actor) {
         Asset asset = requireAsset(assetId);
         AssetAssignment current = currentAssignment(assetId).orElseThrow(() ->
                 new BusinessException(ErrorCode.ASSET_NOT_ASSIGNED, "The asset is not currently assigned."));
@@ -192,13 +232,21 @@ public class AssetCommandService {
         current.close();
         asset.markAvailable();
         assignmentRepository.saveAndFlush(current);   // este flush también guarda el cambio de estado del activo
+
+        audit.record(actor.id(), AuditAction.ASSET_RETURNED, AuditEntityType.ASSET, asset.getId(),
+                AuditMetadata.of("assetTag", asset.getAssetTag(), "returnedBy", current.getUser().getFullName()));
+        notifications.notifyUsers(NotificationType.ASSET_RETURNED,
+                "Asset %s was marked as returned".formatted(asset.getAssetTag()),
+                null, actor.id(), List.of(current.getUser().getId()));
+
         return AssetResponse.from(asset, null);
     }
 
     // Cambiar estado
     @Transactional
-    public AssetResponse changeStatus(UUID assetId, ChangeAssetStatusRequest request) {
+    public AssetResponse changeStatus(UUID assetId, ChangeAssetStatusRequest request, AuthenticatedUser actor) {
         Asset asset = requireAsset(assetId);
+        AssetStatus from = asset.getStatus();
         AssetStatus target = request.status();
 
         if (target == AssetStatus.ASSIGNED) {
@@ -212,6 +260,10 @@ public class AssetCommandService {
 
         asset.changeStatus(target);   // el dominio lanza 409 si la transición no es válida
         assetRepository.saveAndFlush(asset);
+
+        audit.record(actor.id(), AuditAction.ASSET_STATUS_CHANGED, AuditEntityType.ASSET, asset.getId(),
+                AuditMetadata.of("assetTag", asset.getAssetTag(), "from", from, "to", target));
+
         return AssetResponse.from(asset, null);
     }
 

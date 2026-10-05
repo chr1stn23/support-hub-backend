@@ -1,5 +1,9 @@
 package com.chrisdev.supporthub.common.exception;
 
+import com.chrisdev.supporthub.audit.application.AuditMetadata;
+import com.chrisdev.supporthub.audit.application.AuditService;
+import com.chrisdev.supporthub.audit.domain.AuditAction;
+import com.chrisdev.supporthub.audit.domain.AuditEntityType;
 import com.chrisdev.supporthub.common.api.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.NonNull;
@@ -13,7 +17,10 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,20 +29,44 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private final AuditService auditService;
+
+    public GlobalExceptionHandler(AuditService auditService) {
+        this.auditService = auditService;
+    }
+
     private static String path(WebRequest request) {
         return request instanceof ServletWebRequest swr ? swr.getRequest().getRequestURI() : "";
+    }
+
+    private void auditDenied(HttpServletRequest request) {
+        UUID actorId = null;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
+            try {
+                actorId = UUID.fromString(jwt.getSubject());
+            } catch (IllegalArgumentException ignored) {
+                // token con subject raro: se audita sin actor
+            }
+        }
+        auditService.recordFailure(actorId, AuditAction.ACCESS_DENIED, AuditEntityType.SECURITY, null,
+                AuditMetadata.of("method", request.getMethod(), "path", request.getRequestURI()));
     }
 
     // Excepciones propias
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiError> handleBusiness(BusinessException ex, HttpServletRequest request) {
         ErrorCode code = ex.getCode();
+        if (code == ErrorCode.FORBIDDEN) {
+            auditDenied(request);
+        }
         ApiError body = ApiError.of(code.status().value(), code.name(), ex.getMessage(), request.getRequestURI());
         return ResponseEntity.status(code.status()).body(body);
     }
@@ -51,6 +82,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        auditDenied(request);
         ApiError body = ApiError.of(403, ErrorCode.FORBIDDEN.name(),
                 "You do not have permission to perform this action.", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);

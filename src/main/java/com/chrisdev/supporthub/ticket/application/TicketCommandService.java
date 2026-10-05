@@ -2,9 +2,15 @@ package com.chrisdev.supporthub.ticket.application;
 
 import com.chrisdev.supporthub.asset.domain.Asset;
 import com.chrisdev.supporthub.asset.infrastructure.AssetRepository;
+import com.chrisdev.supporthub.audit.application.AuditMetadata;
+import com.chrisdev.supporthub.audit.application.AuditService;
+import com.chrisdev.supporthub.audit.domain.AuditAction;
+import com.chrisdev.supporthub.audit.domain.AuditEntityType;
 import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
+import com.chrisdev.supporthub.notification.application.NotificationService;
+import com.chrisdev.supporthub.notification.domain.NotificationType;
 import com.chrisdev.supporthub.ticket.api.*;
 import com.chrisdev.supporthub.ticket.domain.*;
 import com.chrisdev.supporthub.ticket.infrastructure.CategoryRepository;
@@ -25,6 +31,8 @@ import java.util.UUID;
 @Service
 public class TicketCommandService {
 
+    private final AuditService audit;
+    private final NotificationService notifications;
     private final TicketRepository ticketRepository;
     private final TicketHistoryRepository historyRepository;
     private final TicketCommentRepository commentRepository;
@@ -34,10 +42,14 @@ public class TicketCommandService {
     private final TicketLookup lookup;
     private final TicketAccessPolicy policy;
 
-    public TicketCommandService(TicketRepository ticketRepository, TicketHistoryRepository historyRepository,
+    public TicketCommandService(AuditService audit, NotificationService notifications,
+            TicketRepository ticketRepository,
+            TicketHistoryRepository historyRepository,
             TicketCommentRepository commentRepository, CategoryRepository categoryRepository,
             AssetRepository assetRepository, UserRepository userRepository, TicketLookup lookup,
             TicketAccessPolicy policy) {
+        this.audit = audit;
+        this.notifications = notifications;
         this.ticketRepository = ticketRepository;
         this.historyRepository = historyRepository;
         this.commentRepository = commentRepository;
@@ -65,6 +77,18 @@ public class TicketCommandService {
         return (value == null || value.isBlank()) ? null : value.trim();
     }
 
+    /**
+     * Solicitante y agente asignado (si hay).
+     */
+    private static List<UUID> stakeholders(Ticket ticket) {
+        List<UUID> ids = new ArrayList<>();
+        ids.add(ticket.getRequester().getId());
+        if (ticket.getAgent() != null) {
+            ids.add(ticket.getAgent().getId());
+        }
+        return ids;
+    }
+
     // Crear
     @Transactional
     public TicketResponse create(CreateTicketRequest request, AuthenticatedUser actor) {
@@ -79,6 +103,13 @@ public class TicketCommandService {
 
         historyRepository.save(TicketHistory.of(ticket, requester, TicketEventType.CREATED,
                 null, TicketStatus.OPEN.name(), null));
+
+        audit.record(actor.id(), AuditAction.TICKET_CREATED, AuditEntityType.TICKET, ticket.getId(),
+                AuditMetadata.of("ticketCode", ticket.getTicketCode(),
+                        "priority", ticket.getPriority(), "category", category.getName()));
+        notifications.notifyUsers(NotificationType.TICKET_CREATED,
+                "New ticket %s: %s".formatted(ticket.getTicketCode(), ticket.getTitle()),
+                ticket.getId(), actor.id(), userRepository.findActiveIdsByRole(RoleName.AGENT));
 
         return TicketResponse.from(ticket);
     }
@@ -129,6 +160,15 @@ public class TicketCommandService {
                     "Automatically moved to IN_PROGRESS on assignment."));
         }
 
+        audit.record(actor.id(), AuditAction.TICKET_ASSIGNED, AuditEntityType.TICKET, ticket.getId(),
+                AuditMetadata.of("ticketCode", ticket.getTicketCode(),
+                        "from", previous == null ? null : previous.getFullName(),
+                        "to", assignee.getFullName(),
+                        "status", started ? TicketStatus.IN_PROGRESS : null));
+        notifications.notifyUsers(NotificationType.TICKET_ASSIGNED,
+                "Ticket %s was assigned to %s".formatted(ticket.getTicketCode(), assignee.getFullName()),
+                ticket.getId(), actor.id(), List.of(ticket.getRequester().getId(), assignee.getId()));
+
         return TicketResponse.from(ticket);
     }
 
@@ -155,6 +195,13 @@ public class TicketCommandService {
 
         historyRepository.save(TicketHistory.of(ticket, userRepository.getReferenceById(actor.id()),
                 TicketEventType.STATUS_CHANGED, from.name(), to.name(), note));
+
+        audit.record(actor.id(), AuditAction.TICKET_STATUS_CHANGED, AuditEntityType.TICKET, ticket.getId(),
+                AuditMetadata.of("ticketCode", ticket.getTicketCode(), "from", from, "to", to));
+        notifications.notifyUsers(NotificationType.TICKET_STATUS_CHANGED,
+                "Ticket %s moved from %s to %s".formatted(ticket.getTicketCode(), from, to),
+                ticket.getId(), actor.id(), stakeholders(ticket));
+
         return TicketResponse.from(ticket);
     }
 
@@ -234,6 +281,11 @@ public class TicketCommandService {
 
         ticketRepository.saveAndFlush(ticket);
         historyRepository.saveAll(events);
+
+        audit.record(actor.id(), AuditAction.TICKET_UPDATED, AuditEntityType.TICKET, ticket.getId(),
+                AuditMetadata.of("ticketCode", ticket.getTicketCode(),
+                        "fields", events.stream().map(TicketHistory::getNote).toList()));
+
         return TicketResponse.from(ticket);
     }
 
@@ -250,6 +302,13 @@ public class TicketCommandService {
         User author = requireActiveUser(actor);
         TicketComment comment = commentRepository.saveAndFlush(
                 TicketComment.of(ticket, author, request.body().trim()));
+
+        audit.record(actor.id(), AuditAction.TICKET_COMMENT_ADDED, AuditEntityType.TICKET, ticket.getId(),
+                AuditMetadata.of("ticketCode", ticket.getTicketCode(), "commentId", comment.getId()));
+        notifications.notifyUsers(NotificationType.TICKET_COMMENT_ADDED,
+                "New comment on ticket %s".formatted(ticket.getTicketCode()),
+                ticket.getId(), actor.id(), stakeholders(ticket));
+
         return CommentResponse.from(comment);
     }
 
