@@ -1,14 +1,12 @@
 package com.chrisdev.supporthub.user.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "users")
@@ -41,6 +39,7 @@ public class User {
     @Version
     private Long version;
 
+    @BatchSize(size = 50)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
@@ -86,5 +85,42 @@ public class User {
 
     public boolean isActive() {
         return active;
+    }
+
+    public void changeFullName(String fullName) {
+        this.fullName = fullName.trim();
+    }
+
+    public void changeEmail(String email) {
+        this.email = email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public void activate() {
+        this.active = true;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
+    public void replaceRoles(Set<Role> newRoles) {
+        roles.clear();
+        roles.addAll(newRoles);
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 }

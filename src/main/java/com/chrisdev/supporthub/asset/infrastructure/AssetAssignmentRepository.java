@@ -24,4 +24,6 @@ public interface AssetAssignmentRepository extends JpaRepository<AssetAssignment
 
     @EntityGraph(attributePaths = {"user", "asset", "asset.assetType"})
     List<AssetAssignment> findByUserIdAndReturnedAtIsNull(UUID userId);
+
+    long countByUserIdAndReturnedAtIsNull(UUID userId);
 }
