@@ -1,0 +1,6 @@
+app:
+  security:
+    jwt:
+      secret: test-only-secret-test-only-secret-0123456789
+  storage:
+    path: ${java.io.tmpdir}/supporthub-test-storage
