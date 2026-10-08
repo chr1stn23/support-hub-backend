@@ -43,3 +43,20 @@ app:
     path: ${FILE_STORAGE_PATH:./storage/attachments}
     max-file-size: 5MB
     max-files-per-ticket: 10
+  bootstrap-admin:
+    email: ${BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    full-name: ${BOOTSTRAP_ADMIN_NAME:Administrator}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    persist-authorization: true
