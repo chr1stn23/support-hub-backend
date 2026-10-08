@@ -5,11 +5,40 @@ services:
     environment:
       POSTGRES_DB: supporthub
       POSTGRES_USER: supporthub
-      POSTGRES_PASSWORD: supporthub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supporthub}
     ports:
       - "5432:5432"
     volumes:
       - supporthub-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U supporthub -d supporthub" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    profiles: [ "app" ]
+    build: .
+    container_name: supporthub-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supporthub
+      DATABASE_USERNAME: supporthub
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-supporthub}
+      JWT_SECRET: ${JWT_SECRET:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
+      FILE_STORAGE_PATH: /data/attachments
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Administrator}
+    ports:
+      - "8080:8080"
+    volumes:
+      - supporthub-files:/data/attachments
 
 volumes:
   supporthub-pgdata:
+  supporthub-files:

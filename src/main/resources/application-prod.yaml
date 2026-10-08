@@ -1,0 +1,33 @@
+spring:
+  jpa:
+    show-sql: false
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  web:
+    error:
+      include-message: never
+      include-stacktrace: never
+
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+# La documentación interactiva no se publica en producción
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+server:
+  forward-headers-strategy: framework  # detrás de un proxy, para ver la IP real del cliente
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN
