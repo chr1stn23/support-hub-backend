@@ -21,6 +21,6 @@ public record ApiError(
         return new ApiError(Instant.now(), status, code, message, path, fieldErrors);
     }
 
-    public record FieldErrorDetail(String field, String message) {
+    public record FieldErrorDetail(String field, String code, String message) {
     }
 }

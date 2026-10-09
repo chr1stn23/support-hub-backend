@@ -12,11 +12,12 @@ public record AttachmentResponse(
         String contentType,
         long sizeBytes,
         UserSummary uploadedBy,
-        Instant createdAt
+        Instant createdAt,
+        boolean canDelete
 ) {
 
-    public static AttachmentResponse from(TicketAttachment a) {
+    public static AttachmentResponse from(TicketAttachment a, boolean canDelete) {
         return new AttachmentResponse(a.getId(), a.getOriginalFilename(), a.getContentType(),
-                a.getSizeBytes(), UserSummary.from(a.getUploadedBy()), a.getCreatedAt());
+                a.getSizeBytes(), UserSummary.from(a.getUploadedBy()), a.getCreatedAt(), canDelete);
     }
 }

@@ -127,7 +127,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             @NonNull HttpStatusCode status, @NonNull WebRequest request) {
 
         List<ApiError.FieldErrorDetail> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> new ApiError.FieldErrorDetail(fe.getField(), fe.getDefaultMessage()))
+                .map(fe -> new ApiError.FieldErrorDetail(fe.getField(), fe.getCode(), fe.getDefaultMessage()))
                 .toList();
 
         ApiError body = ApiError.of(400, ErrorCode.VALIDATION_ERROR.name(),

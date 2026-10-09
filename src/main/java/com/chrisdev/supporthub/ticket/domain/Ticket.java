@@ -34,6 +34,9 @@ public class Ticket {
     @Column(nullable = false)
     private TicketPriority priority;
 
+    @Column(name = "priority_rank", insertable = false, updatable = false)
+    private int priorityRank;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TicketStatus status;
@@ -105,6 +108,10 @@ public class Ticket {
 
     public TicketPriority getPriority() {
         return priority;
+    }
+
+    public int getPriorityRank() {
+        return priorityRank;
     }
 
     public TicketStatus getStatus() {
@@ -215,5 +222,9 @@ public class Ticket {
 
     public void linkAsset(Asset asset) {
         this.asset = asset;
+    }
+
+    public boolean canMoveTo(TicketStatus target) {
+        return status.canTransitionTo(target) && !(target == TicketStatus.IN_PROGRESS && agent == null);
     }
 }

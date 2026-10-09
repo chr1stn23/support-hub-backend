@@ -34,15 +34,19 @@ public class Notification {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "asset_id", updatable = false)
+    private UUID assetId;
+
     protected Notification() {
     }
 
-    public static Notification create(UUID userId, NotificationType type, String message, UUID ticketId) {
+    public static Notification create(UUID userId, NotificationType type, String message, UUID ticketId, UUID assetId) {
         Notification n = new Notification();
         n.userId = userId;
         n.type = type;
         n.message = message.length() <= 500 ? message : message.substring(0, 497) + "...";
         n.ticketId = ticketId;
+        n.assetId = assetId;
         return n;
     }
 
@@ -78,5 +82,9 @@ public class Notification {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public UUID getAssetId() {
+        return assetId;
     }
 }

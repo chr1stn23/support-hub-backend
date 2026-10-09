@@ -18,4 +18,13 @@ public enum AssetStatus {
     public boolean canTransitionTo(AssetStatus target) {
         return allowedTransitions().contains(target);
     }
+
+    public String label() {
+        return switch (this) {
+            case AVAILABLE -> "Disponible";
+            case ASSIGNED -> "Asignado";
+            case MAINTENANCE -> "En mantenimiento";
+            case RETIRED -> "De baja";
+        };
+    }
 }

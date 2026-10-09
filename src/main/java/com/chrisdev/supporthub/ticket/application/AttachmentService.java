@@ -92,15 +92,15 @@ public class AttachmentService {
         audit.record(actor.id(), AuditAction.ATTACHMENT_ADDED, AuditEntityType.TICKET, ticket.getId(),
                 AuditMetadata.of("ticketCode", ticket.getTicketCode(), "attachmentId", attachment.getId(),
                         "contentType", type.contentType(), "sizeBytes", stored.sizeBytes()));
-        return AttachmentResponse.from(attachment);
+        return AttachmentResponse.from(attachment, canDelete(actor, ticket, attachment));
     }
 
     // Listar
     @Transactional(readOnly = true)
     public List<AttachmentResponse> list(UUID ticketId, AuthenticatedUser actor) {
-        lookup.requireVisible(ticketId, actor);
+        Ticket ticket = lookup.requireVisible(ticketId, actor);
         return attachmentRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
-                .map(AttachmentResponse::from)
+                .map(a -> AttachmentResponse.from(a, canDelete(actor, ticket, a)))
                 .toList();
     }
 
@@ -181,5 +181,10 @@ public class AttachmentService {
                 storage.delete(key);
             }
         });
+    }
+
+    private boolean canDelete(AuthenticatedUser actor, Ticket ticket, TicketAttachment attachment) {
+        boolean uploader = attachment.getUploadedBy().getId().equals(actor.id());
+        return !ticket.isLocked() && (uploader || policy.hasFullControl(actor, ticket));
     }
 }

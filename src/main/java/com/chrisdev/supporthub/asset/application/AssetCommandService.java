@@ -89,7 +89,7 @@ public class AssetCommandService {
         audit.record(actor.id(), AuditAction.ASSET_CREATED, AuditEntityType.ASSET, asset.getId(),
                 AuditMetadata.of("assetTag", asset.getAssetTag(), "type", type.getName()));
 
-        return AssetResponse.from(asset, null);
+        return AssetResponse.from(asset, null, AssetActions.of(asset, actor));
     }
 
     // Edición
@@ -143,7 +143,7 @@ public class AssetCommandService {
                     AuditMetadata.of("assetTag", asset.getAssetTag(), "fields", changed));
         }
 
-        return AssetResponse.from(asset, currentAssignment(assetId).orElse(null));
+        return AssetResponse.from(asset, currentAssignment(assetId).orElse(null), AssetActions.of(asset, actor));
     }
 
     // Asignar
@@ -174,12 +174,11 @@ public class AssetCommandService {
 
         audit.record(actor.id(), AuditAction.ASSET_ASSIGNED, AuditEntityType.ASSET, asset.getId(),
                 AuditMetadata.of("assetTag", asset.getAssetTag(), "assignedTo", assignee.getFullName()));
-        notifications.notifyUsers(NotificationType.ASSET_ASSIGNED,
-                "Asset %s (%s %s) was assigned to you".formatted(asset.getAssetTag(), asset.getBrand(),
-                        asset.getModel()),
-                null, actor.id(), List.of(assignee.getId()));
+        notifications.notifyAboutAsset(NotificationType.ASSET_ASSIGNED,
+                "Te asignaron el equipo %s (%s %s)".formatted(asset.getAssetTag(), asset.getBrand(), asset.getModel()),
+                asset.getId(), actor.id(), List.of(assignee.getId()));
 
-        return AssetResponse.from(asset, assignment);
+        return AssetResponse.from(asset, assignment, AssetActions.of(asset, actor));
     }
 
     @Transactional
@@ -215,12 +214,12 @@ public class AssetCommandService {
         audit.record(actor.id(), AuditAction.ASSET_TRANSFERRED, AuditEntityType.ASSET, asset.getId(),
                 AuditMetadata.of("assetTag", asset.getAssetTag(),
                         "from", current.getUser().getFullName(), "to", newHolder.getFullName()));
-        notifications.notifyUsers(NotificationType.ASSET_TRANSFERRED,
-                "Asset %s was transferred from %s to %s".formatted(asset.getAssetTag(),
+        notifications.notifyAboutAsset(NotificationType.ASSET_TRANSFERRED,
+                "El equipo %s pasó de %s a %s".formatted(asset.getAssetTag(),
                         current.getUser().getFullName(), newHolder.getFullName()),
-                null, actor.id(), List.of(current.getUser().getId(), newHolder.getId()));
+                asset.getId(), actor.id(), List.of(current.getUser().getId(), newHolder.getId()));
 
-        return AssetResponse.from(asset, next);
+        return AssetResponse.from(asset, next, AssetActions.of(asset, actor));
     }
 
     @Transactional
@@ -235,11 +234,11 @@ public class AssetCommandService {
 
         audit.record(actor.id(), AuditAction.ASSET_RETURNED, AuditEntityType.ASSET, asset.getId(),
                 AuditMetadata.of("assetTag", asset.getAssetTag(), "returnedBy", current.getUser().getFullName()));
-        notifications.notifyUsers(NotificationType.ASSET_RETURNED,
-                "Asset %s was marked as returned".formatted(asset.getAssetTag()),
-                null, actor.id(), List.of(current.getUser().getId()));
+        notifications.notifyAboutAsset(NotificationType.ASSET_RETURNED,
+                "Se registró la devolución del equipo %s".formatted(asset.getAssetTag()),
+                asset.getId(), actor.id(), List.of(current.getUser().getId()));
 
-        return AssetResponse.from(asset, null);
+        return AssetResponse.from(asset, null, AssetActions.of(asset, actor));
     }
 
     // Cambiar estado
@@ -264,7 +263,7 @@ public class AssetCommandService {
         audit.record(actor.id(), AuditAction.ASSET_STATUS_CHANGED, AuditEntityType.ASSET, asset.getId(),
                 AuditMetadata.of("assetTag", asset.getAssetTag(), "from", from, "to", target));
 
-        return AssetResponse.from(asset, null);
+        return AssetResponse.from(asset, null, AssetActions.of(asset, actor));
     }
 
     // Helpers

@@ -1,8 +1,11 @@
 package com.chrisdev.supporthub.asset.infrastructure;
 
 import com.chrisdev.supporthub.asset.domain.Asset;
+import com.chrisdev.supporthub.asset.domain.AssetAssignment;
 import com.chrisdev.supporthub.asset.domain.AssetStatus;
 import com.chrisdev.supporthub.common.util.Texts;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.UUID;
@@ -22,6 +25,21 @@ public class AssetSpecifications {
 
     public static Specification<Asset> hasType(UUID assetTypeId) {
         return (root, query, cb) -> cb.equal(root.get("assetType").get("id"), assetTypeId);
+    }
+
+    /**
+     * Equipos que esa persona tiene ahora (asignación vigente).
+     */
+    public static Specification<Asset> assignedTo(UUID userId) {
+        return (root, query, cb) -> {
+            Subquery<Integer> holder = query.subquery(Integer.class);
+            Root<AssetAssignment> assignment = holder.from(AssetAssignment.class);
+            holder.select(cb.literal(1)).where(
+                    cb.equal(assignment.get("asset"), root),
+                    cb.equal(assignment.get("user").get("id"), userId),
+                    cb.isNull(assignment.get("returnedAt")));
+            return cb.exists(holder);
+        };
     }
 
     public static Specification<Asset> matches(String text) {

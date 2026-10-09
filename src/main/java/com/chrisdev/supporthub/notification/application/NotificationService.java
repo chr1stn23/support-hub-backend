@@ -26,12 +26,7 @@ public class NotificationService {
         this.repository = repository;
     }
 
-    /**
-     * Crea una notificación por destinatario, en la transacción del llamador.
-     * Quita nulos y duplicados, y nunca notifica al propio actor.
-     */
-    @Transactional
-    public void notifyUsers(NotificationType type, String message, UUID ticketId,
+    private void send(NotificationType type, String message, UUID ticketId, UUID assetId,
             UUID actorId, Collection<UUID> recipients) {
         Set<UUID> targets = recipients.stream()
                 .filter(Objects::nonNull)
@@ -41,8 +36,26 @@ public class NotificationService {
             return;
         }
         repository.saveAll(targets.stream()
-                .map(userId -> Notification.create(userId, type, message, ticketId))
+                .map(userId -> Notification.create(userId, type, message, ticketId, assetId))
                 .toList());
+    }
+
+    /**
+     * Notificación sobre un ticket.
+     */
+    @Transactional
+    public void notifyUsers(NotificationType type, String message, UUID ticketId,
+            UUID actorId, Collection<UUID> recipients) {
+        send(type, message, ticketId, null, actorId, recipients);
+    }
+
+    /**
+     * Notificación sobre un equipo.
+     */
+    @Transactional
+    public void notifyAboutAsset(NotificationType type, String message, UUID assetId,
+            UUID actorId, Collection<UUID> recipients) {
+        send(type, message, null, assetId, actorId, recipients);
     }
 
     @Transactional(readOnly = true)

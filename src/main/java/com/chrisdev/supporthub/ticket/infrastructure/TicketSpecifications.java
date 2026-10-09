@@ -5,6 +5,8 @@ import com.chrisdev.supporthub.ticket.domain.TicketPriority;
 import com.chrisdev.supporthub.ticket.domain.TicketStatus;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.UUID;
 
 public final class TicketSpecifications {
@@ -23,12 +25,12 @@ public final class TicketSpecifications {
         return (root, query, cb) -> cb.equal(root.get("requester").get("id"), userId);
     }
 
-    public static Specification<Ticket> hasStatus(TicketStatus status) {
-        return (root, query, cb) -> cb.equal(root.get("status"), status);
+    public static Specification<Ticket> statusIn(Collection<TicketStatus> statuses) {
+        return (root, query, cb) -> root.get("status").in(statuses);
     }
 
-    public static Specification<Ticket> hasPriority(TicketPriority priority) {
-        return (root, query, cb) -> cb.equal(root.get("priority"), priority);
+    public static Specification<Ticket> priorityIn(Collection<TicketPriority> priorities) {
+        return (root, query, cb) -> root.get("priority").in(priorities);
     }
 
     public static Specification<Ticket> inCategory(UUID categoryId) {
@@ -45,6 +47,14 @@ public final class TicketSpecifications {
 
     public static Specification<Ticket> forAsset(UUID assetId) {
         return (root, query, cb) -> cb.equal(root.get("asset").get("id"), assetId);
+    }
+
+    public static Specification<Ticket> createdFrom(Instant from) {
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.<Instant>get("createdAt"), from);
+    }
+
+    public static Specification<Ticket> createdBefore(Instant to) {
+        return (root, query, cb) -> cb.lessThan(root.<Instant>get("createdAt"), to);
     }
 
     /**

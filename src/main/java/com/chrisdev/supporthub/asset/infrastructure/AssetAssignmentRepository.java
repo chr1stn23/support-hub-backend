@@ -26,4 +26,6 @@ public interface AssetAssignmentRepository extends JpaRepository<AssetAssignment
     List<AssetAssignment> findByUserIdAndReturnedAtIsNull(UUID userId);
 
     long countByUserIdAndReturnedAtIsNull(UUID userId);
+
+    boolean existsByAssetIdAndUserIdAndReturnedAtIsNull(UUID assetId, UUID userId);
 }

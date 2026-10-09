@@ -18,15 +18,16 @@ public record TicketSummaryResponse(
         UserSummary requester,
         UserSummary agent,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        boolean canAssignToSelf
 ) {
 
-    public static TicketSummaryResponse from(Ticket t) {
+    public static TicketSummaryResponse from(Ticket t, boolean canAssignToSelf) {
         return new TicketSummaryResponse(
                 t.getId(), t.getTicketCode(), t.getTitle(), t.getStatus(), t.getPriority(),
                 t.getCategory().getName(),
                 UserSummary.from(t.getRequester()),
                 UserSummary.from(t.getAgent()),
-                t.getCreatedAt(), t.getUpdatedAt());
+                t.getCreatedAt(), t.getUpdatedAt(), canAssignToSelf);
     }
 }

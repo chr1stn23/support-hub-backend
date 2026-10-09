@@ -4,5 +4,5 @@ import com.chrisdev.supporthub.asset.domain.AssetStatus;
 
 import java.util.UUID;
 
-public record AssetSearchCriteria(AssetStatus status, UUID assetTypeId, String search) {
+public record AssetSearchCriteria(AssetStatus status, UUID assetTypeId, UUID assignedTo, String search) {
 }

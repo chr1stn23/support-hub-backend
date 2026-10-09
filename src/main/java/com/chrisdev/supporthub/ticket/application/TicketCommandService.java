@@ -1,6 +1,7 @@
 package com.chrisdev.supporthub.ticket.application;
 
 import com.chrisdev.supporthub.asset.domain.Asset;
+import com.chrisdev.supporthub.asset.infrastructure.AssetAssignmentRepository;
 import com.chrisdev.supporthub.asset.infrastructure.AssetRepository;
 import com.chrisdev.supporthub.audit.application.AuditMetadata;
 import com.chrisdev.supporthub.audit.application.AuditService;
@@ -31,33 +32,52 @@ import java.util.UUID;
 @Service
 public class TicketCommandService {
 
-    private final AuditService audit;
-    private final NotificationService notifications;
     private final TicketRepository ticketRepository;
     private final TicketHistoryRepository historyRepository;
     private final TicketCommentRepository commentRepository;
     private final CategoryRepository categoryRepository;
     private final AssetRepository assetRepository;
+    private final AssetAssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
     private final TicketLookup lookup;
     private final TicketAccessPolicy policy;
+    private final AuditService audit;
+    private final NotificationService notifications;
 
-    public TicketCommandService(AuditService audit, NotificationService notifications,
-            TicketRepository ticketRepository,
+    public TicketCommandService(TicketRepository ticketRepository,
             TicketHistoryRepository historyRepository,
-            TicketCommentRepository commentRepository, CategoryRepository categoryRepository,
-            AssetRepository assetRepository, UserRepository userRepository, TicketLookup lookup,
-            TicketAccessPolicy policy) {
-        this.audit = audit;
-        this.notifications = notifications;
+            TicketCommentRepository commentRepository,
+            CategoryRepository categoryRepository,
+            AssetRepository assetRepository,
+            AssetAssignmentRepository assignmentRepository,
+            UserRepository userRepository,
+            TicketLookup lookup,
+            TicketAccessPolicy policy,
+            AuditService audit,
+            NotificationService notifications) {
         this.ticketRepository = ticketRepository;
         this.historyRepository = historyRepository;
         this.commentRepository = commentRepository;
         this.categoryRepository = categoryRepository;
         this.assetRepository = assetRepository;
+        this.assignmentRepository = assignmentRepository;
         this.userRepository = userRepository;
         this.lookup = lookup;
         this.policy = policy;
+        this.audit = audit;
+        this.notifications = notifications;
+    }
+
+    /**
+     * Solicitante y agente asignado (si hay).
+     */
+    private static List<UUID> stakeholders(Ticket ticket) {
+        List<UUID> ids = new ArrayList<>();
+        ids.add(ticket.getRequester().getId());
+        if (ticket.getAgent() != null) {
+            ids.add(ticket.getAgent().getId());
+        }
+        return ids;
     }
 
     private static TicketHistory detailsChanged(Ticket ticket, User actor, String field,
@@ -77,28 +97,17 @@ public class TicketCommandService {
         return (value == null || value.isBlank()) ? null : value.trim();
     }
 
-    /**
-     * Solicitante y agente asignado (si hay).
-     */
-    private static List<UUID> stakeholders(Ticket ticket) {
-        List<UUID> ids = new ArrayList<>();
-        ids.add(ticket.getRequester().getId());
-        if (ticket.getAgent() != null) {
-            ids.add(ticket.getAgent().getId());
-        }
-        return ids;
-    }
-
     // Crear
     @Transactional
     public TicketResponse create(CreateTicketRequest request, AuthenticatedUser actor) {
         User requester = requireActiveUser(actor);
         Category category = findActiveCategory(request.categoryId());
-        Asset asset = request.assetId() == null ? null : findAsset(request.assetId());
+        Asset asset = request.assetId() == null ? null : findLinkableAsset(request.assetId(), actor);
 
         Ticket ticket = Ticket.open(request.title(), request.description(),
                 category, request.priority(), requester, asset);
 
+        // saveAndFlush fuerza el INSERT ahora, para que Hibernate lea el ticket_code generado por la BD
         ticketRepository.saveAndFlush(ticket);
 
         historyRepository.save(TicketHistory.of(ticket, requester, TicketEventType.CREATED,
@@ -108,10 +117,10 @@ public class TicketCommandService {
                 AuditMetadata.of("ticketCode", ticket.getTicketCode(),
                         "priority", ticket.getPriority(), "category", category.getName()));
         notifications.notifyUsers(NotificationType.TICKET_CREATED,
-                "New ticket %s: %s".formatted(ticket.getTicketCode(), ticket.getTitle()),
+                "Nuevo ticket %s: %s".formatted(ticket.getTicketCode(), ticket.getTitle()),
                 ticket.getId(), actor.id(), userRepository.findActiveIdsByRole(RoleName.AGENT));
 
-        return TicketResponse.from(ticket);
+        return respond(ticket, actor);
     }
 
     // Asignar
@@ -139,7 +148,7 @@ public class TicketCommandService {
 
         User previous = ticket.getAgent();
         if (previous != null && previous.getId().equals(assignee.getId())) {
-            return TicketResponse.from(ticket);   // ya estaba asignado a esa persona: no hay nada que hacer
+            return respond(ticket, actor);   // ya estaba asignado a esa persona: no hay nada que hacer
         }
 
         if (previous != null && !policy.isAdmin(actor)) {
@@ -155,9 +164,9 @@ public class TicketCommandService {
         historyRepository.save(TicketHistory.of(ticket, actorRef, TicketEventType.ASSIGNED,
                 previous == null ? null : previous.getFullName(), assignee.getFullName(), null));
         if (started) {
+            // Sin nota: la interfaz ya sabe explicar "OPEN → IN_PROGRESS" a partir de los dos eventos
             historyRepository.save(TicketHistory.of(ticket, actorRef, TicketEventType.STATUS_CHANGED,
-                    TicketStatus.OPEN.name(), TicketStatus.IN_PROGRESS.name(),
-                    "Automatically moved to IN_PROGRESS on assignment."));
+                    TicketStatus.OPEN.name(), TicketStatus.IN_PROGRESS.name(), null));
         }
 
         audit.record(actor.id(), AuditAction.TICKET_ASSIGNED, AuditEntityType.TICKET, ticket.getId(),
@@ -166,10 +175,10 @@ public class TicketCommandService {
                         "to", assignee.getFullName(),
                         "status", started ? TicketStatus.IN_PROGRESS : null));
         notifications.notifyUsers(NotificationType.TICKET_ASSIGNED,
-                "Ticket %s was assigned to %s".formatted(ticket.getTicketCode(), assignee.getFullName()),
+                "El ticket %s fue asignado a %s".formatted(ticket.getTicketCode(), assignee.getFullName()),
                 ticket.getId(), actor.id(), List.of(ticket.getRequester().getId(), assignee.getId()));
 
-        return TicketResponse.from(ticket);
+        return respond(ticket, actor);
     }
 
     // Cambiar estado
@@ -199,10 +208,10 @@ public class TicketCommandService {
         audit.record(actor.id(), AuditAction.TICKET_STATUS_CHANGED, AuditEntityType.TICKET, ticket.getId(),
                 AuditMetadata.of("ticketCode", ticket.getTicketCode(), "from", from, "to", to));
         notifications.notifyUsers(NotificationType.TICKET_STATUS_CHANGED,
-                "Ticket %s moved from %s to %s".formatted(ticket.getTicketCode(), from, to),
+                "El ticket %s cambió de «%s» a «%s»".formatted(ticket.getTicketCode(), from.label(), to.label()),
                 ticket.getId(), actor.id(), stakeholders(ticket));
 
-        return TicketResponse.from(ticket);
+        return respond(ticket, actor);
     }
 
     // Editar
@@ -214,18 +223,14 @@ public class TicketCommandService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "No changes were provided.");
         }
 
-        if (!policy.hasFullControl(actor, ticket)) {
-            if (!policy.isRequester(actor, ticket)) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "You are not allowed to edit this ticket.");
-            }
-            if (ticket.getStatus() != TicketStatus.OPEN) {
-                throw new BusinessException(ErrorCode.FORBIDDEN,
-                        "You can only edit your ticket while it is OPEN.");
-            }
-            if (request.categoryId() != null || request.priority() != null || request.assetId() != null) {
-                throw new BusinessException(ErrorCode.FORBIDDEN,
-                        "Only the assigned agent or an admin can change category, priority or asset.");
-            }
+        // Las mismas dos preguntas que responde `actions.editContent` y `actions.editTriage`
+        boolean touchesTriage = request.categoryId() != null || request.priority() != null || request.assetId() != null;
+        if (!policy.mayEditContent(actor, ticket)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "You are not allowed to edit this ticket.");
+        }
+        if (touchesTriage && !policy.mayEditTriage(actor, ticket)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "Only the assigned agent or an admin can change category, priority or asset.");
         }
 
         if (ticket.isLocked()) {
@@ -270,13 +275,14 @@ public class TicketCommandService {
         }
         if (request.assetId() != null
                 && (ticket.getAsset() == null || !request.assetId().equals(ticket.getAsset().getId()))) {
-            Asset asset = findAsset(request.assetId());
+            Asset asset = findAsset(request.assetId());   // quien llega aquí tiene control total: cualquier equipo
             events.add(detailsChanged(ticket, actorRef, "asset",
                     ticket.getAsset() == null ? null : ticket.getAsset().getAssetTag(), asset.getAssetTag()));
             ticket.linkAsset(asset);
         }
+
         if (events.isEmpty()) {
-            return TicketResponse.from(ticket);   // los valores enviados ya eran los actuales
+            return respond(ticket, actor);   // los valores enviados ya eran los actuales
         }
 
         ticketRepository.saveAndFlush(ticket);
@@ -285,8 +291,7 @@ public class TicketCommandService {
         audit.record(actor.id(), AuditAction.TICKET_UPDATED, AuditEntityType.TICKET, ticket.getId(),
                 AuditMetadata.of("ticketCode", ticket.getTicketCode(),
                         "fields", events.stream().map(TicketHistory::getNote).toList()));
-
-        return TicketResponse.from(ticket);
+        return respond(ticket, actor);
     }
 
     // Comentarios
@@ -306,15 +311,18 @@ public class TicketCommandService {
         audit.record(actor.id(), AuditAction.TICKET_COMMENT_ADDED, AuditEntityType.TICKET, ticket.getId(),
                 AuditMetadata.of("ticketCode", ticket.getTicketCode(), "commentId", comment.getId()));
         notifications.notifyUsers(NotificationType.TICKET_COMMENT_ADDED,
-                "New comment on ticket %s".formatted(ticket.getTicketCode()),
+                "Nuevo comentario en el ticket %s".formatted(ticket.getTicketCode()),
                 ticket.getId(), actor.id(), stakeholders(ticket));
 
         return CommentResponse.from(comment);
     }
 
     // Helpers
+    private TicketResponse respond(Ticket ticket, AuthenticatedUser actor) {
+        return TicketResponse.from(ticket, policy.actionsFor(actor, ticket));
+    }
+
     private User requireActiveUser(AuthenticatedUser actor) {
-        // El JWT sigue siendo válido aunque desactiven al usuario, así que lo comprobamos al escribir
         return userRepository.findById(actor.id())
                 .filter(User::isActive)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED,
@@ -332,5 +340,19 @@ public class TicketCommandService {
         return assetRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
                         "The selected asset does not exist."));
+    }
+
+    /**
+     * El personal de TI puede vincular cualquier equipo; una persona común, solo los que tiene asignados.
+     * El mensaje es el mismo si el equipo no existe o si no es suyo, para no revelar el inventario.
+     */
+    private Asset findLinkableAsset(UUID assetId, AuthenticatedUser actor) {
+        boolean staff = actor.hasRole(RoleName.ADMIN) || actor.hasRole(RoleName.AGENT)
+                || actor.hasRole(RoleName.ASSET_MANAGER);
+        if (!staff && !assignmentRepository.existsByAssetIdAndUserIdAndReturnedAtIsNull(assetId, actor.id())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "The selected asset does not exist or is not assigned to you.");
+        }
+        return findAsset(assetId);
     }
 }

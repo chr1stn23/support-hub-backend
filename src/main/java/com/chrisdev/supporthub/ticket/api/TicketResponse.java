@@ -24,10 +24,11 @@ public record TicketResponse(
         Instant updatedAt,
         Instant resolvedAt,
         Instant closedAt,
-        Long version
+        Long version,
+        TicketActions actions
 ) {
 
-    public static TicketResponse from(Ticket t) {
+    public static TicketResponse from(Ticket t, TicketActions actions) {
         return new TicketResponse(
                 t.getId(), t.getTicketCode(), t.getTitle(), t.getDescription(),
                 t.getStatus(), t.getPriority(),
@@ -36,6 +37,6 @@ public record TicketResponse(
                 UserSummary.from(t.getAgent()),
                 AssetSummary.from(t.getAsset()),
                 t.getCreatedAt(), t.getUpdatedAt(), t.getResolvedAt(), t.getClosedAt(),
-                t.getVersion());
+                t.getVersion(), actions);
     }
 }

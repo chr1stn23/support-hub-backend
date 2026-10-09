@@ -20,7 +20,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -35,6 +38,10 @@ public class TicketController {
         this.queryService = queryService;
     }
 
+    private static <T> Set<T> toSet(List<T> values) {
+        return values == null ? Set.of() : new LinkedHashSet<>(values);
+    }
+
     @PostMapping
     public ResponseEntity<TicketResponse> create(@Valid @RequestBody CreateTicketRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -47,16 +54,20 @@ public class TicketController {
 
     @GetMapping
     public PageResponse<TicketSummaryResponse> search(
-            @RequestParam(required = false) TicketStatus status,
-            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) List<TicketStatus> status,
+            @RequestParam(required = false) List<TicketPriority> priority,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) UUID assignedTo,
             @RequestParam(required = false) Boolean unassigned,
             @RequestParam(required = false) UUID assetId,
+            @RequestParam(required = false) Instant createdFrom,
+            @RequestParam(required = false) Instant createdTo,
             @RequestParam(required = false) String search,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             @AuthenticationPrincipal Jwt jwt) {
-        var criteria = new TicketSearchCriteria(status, priority, categoryId, assignedTo, unassigned, assetId, search);
+
+        var criteria = new TicketSearchCriteria(toSet(status), toSet(priority), categoryId, assignedTo, unassigned,
+                assetId, createdFrom, createdTo, search);
         return queryService.search(criteria, pageable, AuthenticatedUser.from(jwt));
     }
 

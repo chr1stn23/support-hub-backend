@@ -11,13 +11,14 @@ public record NotificationResponse(
         NotificationType type,
         String message,
         UUID ticketId,
+        UUID asset,
         boolean read,
         Instant readAt,
         Instant createdAt
 ) {
 
     public static NotificationResponse from(Notification n) {
-        return new NotificationResponse(n.getId(), n.getType(), n.getMessage(), n.getTicketId(),
+        return new NotificationResponse(n.getId(), n.getType(), n.getMessage(), n.getTicketId(), n.getAssetId(),
                 n.getReadAt() != null, n.getReadAt(), n.getCreatedAt());
     }
 }

@@ -18,4 +18,15 @@ public enum TicketStatus {
     public boolean canTransitionTo(TicketStatus target) {
         return allowedTransitions().contains(target);
     }
+
+    public String label() {
+        return switch (this) {
+            case OPEN -> "Sin asignar";
+            case IN_PROGRESS -> "En curso";
+            case WAITING -> "Esperando";
+            case RESOLVED -> "Resuelto";
+            case CLOSED -> "Cerrado";
+            case CANCELLED -> "Cancelado";
+        };
+    }
 }

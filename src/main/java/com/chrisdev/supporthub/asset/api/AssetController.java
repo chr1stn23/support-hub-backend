@@ -6,6 +6,7 @@ import com.chrisdev.supporthub.asset.application.AssetSearchCriteria;
 import com.chrisdev.supporthub.asset.domain.AssetStatus;
 import com.chrisdev.supporthub.common.api.PageResponse;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
+import com.chrisdev.supporthub.ticket.api.TicketSummaryResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -43,9 +44,10 @@ public class AssetController {
     public PageResponse<AssetSummaryResponse> search(
             @RequestParam(required = false) AssetStatus status,
             @RequestParam(required = false) UUID assetTypeId,
+            @RequestParam(required = false) UUID assignedTo,
             @RequestParam(required = false) String search,
             @PageableDefault(sort = "assetTag", direction = Sort.Direction.ASC) Pageable pageable) {
-        return queryService.search(new AssetSearchCriteria(status, assetTypeId, search), pageable);
+        return queryService.search(new AssetSearchCriteria(status, assetTypeId, assignedTo, search), pageable);
     }
 
     /**
@@ -58,14 +60,21 @@ public class AssetController {
 
     @GetMapping("/{id}")
     @PreAuthorize(READERS)
-    public AssetResponse get(@PathVariable UUID id) {
-        return queryService.getById(id);
+    public AssetResponse get(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return queryService.getById(id, AuthenticatedUser.from(jwt));
     }
 
     @GetMapping("/{id}/assignments")
     @PreAuthorize(READERS)
     public List<AssignmentResponse> assignments(@PathVariable UUID id) {
         return queryService.getAssignments(id);
+    }
+
+    // Resumen de los tickets que mencionan este equipo (hasta 25, los más recientes).
+    @GetMapping("/{id}/tickets")
+    @PreAuthorize(READERS)
+    public List<TicketSummaryResponse> relatedTickets(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        return queryService.relatedTickets(id, AuthenticatedUser.from(jwt));
     }
 
     // Escritura

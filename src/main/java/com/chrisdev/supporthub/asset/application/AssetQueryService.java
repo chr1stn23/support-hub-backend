@@ -1,9 +1,6 @@
 package com.chrisdev.supporthub.asset.application;
 
-import com.chrisdev.supporthub.asset.api.AssetResponse;
-import com.chrisdev.supporthub.asset.api.AssetSummaryResponse;
-import com.chrisdev.supporthub.asset.api.AssetTypeResponse;
-import com.chrisdev.supporthub.asset.api.AssignmentResponse;
+import com.chrisdev.supporthub.asset.api.*;
 import com.chrisdev.supporthub.asset.domain.Asset;
 import com.chrisdev.supporthub.asset.domain.AssetAssignment;
 import com.chrisdev.supporthub.asset.infrastructure.AssetAssignmentRepository;
@@ -15,6 +12,8 @@ import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.common.exception.ResourceNotFoundException;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
+import com.chrisdev.supporthub.ticket.api.TicketSummaryResponse;
+import com.chrisdev.supporthub.ticket.application.TicketQueryService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -40,13 +39,15 @@ public class AssetQueryService {
     private final AssetRepository assetRepository;
     private final AssetTypeRepository assetTypeRepository;
     private final AssetAssignmentRepository assignmentRepository;
+    private final TicketQueryService ticketQueryService;
 
     public AssetQueryService(AssetRepository assetRepository,
             AssetTypeRepository assetTypeRepository,
-            AssetAssignmentRepository assignmentRepository) {
+            AssetAssignmentRepository assignmentRepository, TicketQueryService ticketQueryService) {
         this.assetRepository = assetRepository;
         this.assetTypeRepository = assetTypeRepository;
         this.assignmentRepository = assignmentRepository;
+        this.ticketQueryService = ticketQueryService;
     }
 
     public PageResponse<AssetSummaryResponse> search(AssetSearchCriteria criteria, Pageable pageable) {
@@ -64,6 +65,9 @@ public class AssetQueryService {
         }
         if (criteria.assetTypeId() != null) {
             spec = spec.and(AssetSpecifications.hasType(criteria.assetTypeId()));
+        }
+        if (criteria.assignedTo() != null) {
+            spec = spec.and(AssetSpecifications.assignedTo(criteria.assignedTo()));
         }
         if (criteria.search() != null && !criteria.search().isBlank()) {
             String text = criteria.search().trim();
@@ -85,11 +89,11 @@ public class AssetQueryService {
         return PageResponse.from(page, a -> AssetSummaryResponse.from(a, holders.get(a.getId())));
     }
 
-    public AssetResponse getById(UUID id) {
+    public AssetResponse getById(UUID id, AuthenticatedUser actor) {
         Asset asset = assetRepository.findDetailById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Asset", id));
         AssetAssignment current = assignmentRepository.findByAssetIdAndReturnedAtIsNull(id).orElse(null);
-        return AssetResponse.from(asset, current);
+        return AssetResponse.from(asset, current, AssetActions.of(asset, actor));
     }
 
     public List<AssignmentResponse> getAssignments(UUID assetId) {
@@ -111,5 +115,12 @@ public class AssetQueryService {
         return assetTypeRepository.findByActiveTrueOrderByNameAsc().stream()
                 .map(AssetTypeResponse::from)
                 .toList();
+    }
+
+    public List<TicketSummaryResponse> relatedTickets(UUID assetId, AuthenticatedUser actor) {
+        if (!assetRepository.existsById(assetId)) {
+            throw new ResourceNotFoundException("Asset", assetId);
+        }
+        return ticketQueryService.recentForAsset(assetId, actor);
     }
 }
