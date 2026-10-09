@@ -11,7 +11,7 @@ public record NotificationResponse(
         NotificationType type,
         String message,
         UUID ticketId,
-        UUID asset,
+        UUID assetId,
         boolean read,
         Instant readAt,
         Instant createdAt
