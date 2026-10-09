@@ -81,9 +81,13 @@ public abstract class IntegrationTestSupport {
     }
 
     protected String createTicket(TestUser requester, String title) throws Exception {
+        return createTicket(requester, title, "MEDIUM");
+    }
+
+    protected String createTicket(TestUser requester, String title, String priority) throws Exception {
         String body = """
                 {"title":"%s","description":"Descripción de prueba suficientemente larga",\
-                "categoryId":"%s","priority":"MEDIUM"}""".formatted(title, categoryId());
+                "categoryId":"%s","priority":"%s"}""".formatted(title, categoryId(), priority);
         return read(post(requester, "/api/v1/tickets", body).andExpect(status().isCreated()), "$.id");
     }
 

@@ -1,10 +1,7 @@
 package com.chrisdev.supporthub.dashboard.infrastructure;
 
 import com.chrisdev.supporthub.asset.domain.AssetStatus;
-import com.chrisdev.supporthub.dashboard.api.DashboardSummaryResponse.ActivityItem;
-import com.chrisdev.supporthub.dashboard.api.DashboardSummaryResponse.AgentMetrics;
-import com.chrisdev.supporthub.dashboard.api.DashboardSummaryResponse.CategoryCount;
-import com.chrisdev.supporthub.dashboard.api.DashboardSummaryResponse.TypeCount;
+import com.chrisdev.supporthub.dashboard.api.DashboardSummaryResponse.*;
 import com.chrisdev.supporthub.ticket.domain.TicketPriority;
 import com.chrisdev.supporthub.ticket.domain.TicketStatus;
 import com.chrisdev.supporthub.user.api.UserSummary;
@@ -12,6 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
@@ -145,6 +143,43 @@ public class DashboardQueryRepository {
                         rs.getString("new_value"),
                         rs.getString("note")
                 ))
+                .list();
+    }
+
+    public List<DayPoint> ticketTrend(Instant since, Instant until, UUID requesterScope) {
+
+        String sql = """
+                WITH days AS (
+                  SELECT CAST(g AS date) AS day
+                  FROM generate_series(CAST(:fromDay AS timestamp), CAST(:toDay AS timestamp), INTERVAL '1 day') AS g
+                ),
+                created AS (
+                  SELECT CAST(t.created_at AT TIME ZONE 'UTC' AS date) AS day, COUNT(*) AS n
+                  FROM tickets t
+                  WHERE t.created_at >= :since %1$s
+                  GROUP BY 1
+                ),
+                resolved AS (
+                  SELECT CAST(t.resolved_at AT TIME ZONE 'UTC' AS date) AS day, COUNT(*) AS n
+                  FROM tickets t
+                  WHERE t.resolved_at >= :since %1$s
+                  GROUP BY 1
+                )
+                SELECT d.day, COALESCE(c.n, 0) AS created, COALESCE(r.n, 0) AS resolved
+                FROM days d
+                LEFT JOIN created c ON c.day = d.day
+                LEFT JOIN resolved r ON r.day = d.day
+                ORDER BY d.day
+                """.formatted(scopeClause(requesterScope));
+
+        return bind(sql, requesterScope)
+                .param("since", utc(since))
+                .param("fromDay", since.atZone(ZoneOffset.UTC).toLocalDate())
+                .param("toDay", until.atZone(ZoneOffset.UTC).toLocalDate())
+                .query((rs, n) -> new DayPoint(
+                        rs.getObject("day", LocalDate.class).toString(),
+                        rs.getLong("created"),
+                        rs.getLong("resolved")))
                 .list();
     }
 

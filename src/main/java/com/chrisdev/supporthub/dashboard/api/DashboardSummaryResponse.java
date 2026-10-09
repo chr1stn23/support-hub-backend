@@ -34,7 +34,8 @@ public record DashboardSummaryResponse(
             long resolvedInPeriod,
             Double avgResolutionHours,
             Map<TicketStatus, Long> byStatus,
-            List<CategoryCount> byCategory
+            List<CategoryCount> byCategory,
+            List<DayPoint> trend
     ) {
     }
 
@@ -61,5 +62,11 @@ public record DashboardSummaryResponse(
             String newValue,
             String note
     ) {
+    }
+
+    /**
+     * Un día (en UTC) de la tendencia. day es una fecha ISO: "2026-10-08".
+     */
+    public record DayPoint(String day, long created, long resolved) {
     }
 }

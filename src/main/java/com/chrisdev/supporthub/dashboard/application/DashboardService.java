@@ -61,7 +61,8 @@ public class DashboardService {
                 c.open(), c.unassigned(), c.highPriorityOpen(), c.createdInPeriod(), c.resolvedInPeriod(),
                 round1(c.avgResolutionHours()),
                 queries.ticketsByStatus(scope),
-                queries.ticketsByCategory(since, scope));
+                queries.ticketsByCategory(since, scope),
+                queries.ticketTrend(since, now, scope));
 
         AgentMetrics mine = seesAll ? queries.agentMetrics(user.id(), since) : null;
         AssetMetrics assets = canSeeAssets(user) ? assetMetrics() : null;
