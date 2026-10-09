@@ -12,6 +12,7 @@ public record UserAdminResponse(
         String fullName,
         boolean active,
         List<String> roles,
+        Instant lastLoginAt,
         Instant createdAt,
         Instant updatedAt,
         Long version
@@ -19,6 +20,6 @@ public record UserAdminResponse(
 
     public static UserAdminResponse from(User u) {
         return new UserAdminResponse(u.getId(), u.getEmail(), u.getFullName(), u.isActive(),
-                u.roleNames(), u.getCreatedAt(), u.getUpdatedAt(), u.getVersion());
+                u.roleNames(), u.getLastLoginAt(), u.getCreatedAt(), u.getUpdatedAt(), u.getVersion());
     }
 }

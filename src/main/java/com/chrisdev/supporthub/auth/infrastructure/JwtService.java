@@ -33,6 +33,7 @@ public class JwtService {
                 .subject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("roles", user.roleNames())
+                .claim("stamp", user.getSecurityStamp().toString())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();

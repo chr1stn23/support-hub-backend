@@ -64,11 +64,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiError> handleBusiness(BusinessException ex, HttpServletRequest request) {
         ErrorCode code = ex.getCode();
-        if (code == ErrorCode.FORBIDDEN) {
+        if (code == ErrorCode.FORBIDDEN || code == ErrorCode.CSRF_TOKEN_INVALID) {
             auditDenied(request);
         }
         ApiError body = ApiError.of(code.status().value(), code.name(), ex.getMessage(), request.getRequestURI());
-        return ResponseEntity.status(code.status()).body(body);
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(code.status());
+        if (ex instanceof TooManyAttemptsException tooMany) {
+            response.header(HttpHeaders.RETRY_AFTER, String.valueOf(tooMany.getRetryAfterSeconds()));
+        }
+        return response.body(body);
     }
 
     @ExceptionHandler(AuthenticationException.class)

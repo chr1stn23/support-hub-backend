@@ -5,6 +5,7 @@ import com.chrisdev.supporthub.audit.application.AuditMetadata;
 import com.chrisdev.supporthub.audit.application.AuditService;
 import com.chrisdev.supporthub.audit.domain.AuditAction;
 import com.chrisdev.supporthub.audit.domain.AuditEntityType;
+import com.chrisdev.supporthub.auth.application.SessionService;
 import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.common.exception.ResourceNotFoundException;
@@ -38,17 +39,19 @@ public class UserCommandService {
     private final AuditService audit;
     private final AssetAssignmentRepository assignmentRepository;
     private final TicketRepository ticketRepository;
+    private final SessionService sessions;
 
     public UserCommandService(UserRepository userRepository, RoleRepository roleRepository,
             PasswordEncoder passwordEncoder, AuditService audit,
             AssetAssignmentRepository assignmentRepository,
-            TicketRepository ticketRepository) {
+            TicketRepository ticketRepository, SessionService sessions) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
         this.assignmentRepository = assignmentRepository;
         this.ticketRepository = ticketRepository;
+        this.sessions = sessions;
     }
 
     private static List<String> names(Set<Role> roles) {
@@ -151,6 +154,7 @@ public class UserCommandService {
         }
 
         user.replaceRoles(newRoles);
+        user.rotateSecurityStamp();
         userRepository.saveAndFlush(user);
         if (losesAdmin) {
             ensureAnAdminRemains();
@@ -177,7 +181,9 @@ public class UserCommandService {
         ensureNoPendingWork(user);
 
         user.deactivate();
+        user.rotateSecurityStamp();
         userRepository.saveAndFlush(user);
+        sessions.revokeAllFor(user.getId());
         ensureAnAdminRemains();
 
         audit.record(actor.id(), AuditAction.USER_DEACTIVATED, AuditEntityType.USER, user.getId(),
@@ -203,7 +209,7 @@ public class UserCommandService {
 
     // Contraseñas
     @Transactional
-    public void changeOwnPassword(ChangePasswordRequest request, AuthenticatedUser actor) {
+    public SessionService.Session changeOwnPassword(ChangePasswordRequest request, AuthenticatedUser actor) {
         User user = userRepository.findById(actor.id())
                 .filter(User::isActive)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED,
@@ -219,9 +225,12 @@ public class UserCommandService {
         requireEncodable(request.newPassword());
 
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.rotateSecurityStamp();
         userRepository.saveAndFlush(user);
+        sessions.revokeAllFor(user.getId());
 
         audit.record(actor.id(), AuditAction.PASSWORD_CHANGED, AuditEntityType.USER, user.getId(), null);
+        return sessions.open(user);
     }
 
     @Transactional
@@ -235,7 +244,9 @@ public class UserCommandService {
         requireEncodable(request.newPassword());
 
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.rotateSecurityStamp();
         userRepository.saveAndFlush(user);
+        sessions.revokeAllFor(user.getId());
 
         audit.record(actor.id(), AuditAction.PASSWORD_RESET, AuditEntityType.USER, user.getId(),
                 AuditMetadata.of("email", user.getEmail()));

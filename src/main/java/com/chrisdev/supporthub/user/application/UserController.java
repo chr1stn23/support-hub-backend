@@ -1,5 +1,7 @@
 package com.chrisdev.supporthub.user.application;
 
+import com.chrisdev.supporthub.auth.application.SessionService;
+import com.chrisdev.supporthub.auth.infrastructure.AuthCookies;
 import com.chrisdev.supporthub.common.api.PageResponse;
 import com.chrisdev.supporthub.common.security.AuthenticatedUser;
 import com.chrisdev.supporthub.user.api.*;
@@ -28,10 +30,12 @@ public class UserController {
 
     private final UserCommandService commandService;
     private final UserQueryService queryService;
+    private final AuthCookies cookies;
 
-    public UserController(UserCommandService commandService, UserQueryService queryService) {
+    public UserController(UserCommandService commandService, UserQueryService queryService, AuthCookies cookies) {
         this.commandService = commandService;
         this.queryService = queryService;
+        this.cookies = cookies;
     }
 
     // Selector
@@ -109,10 +113,10 @@ public class UserController {
 
     // Cualquier usuario autenticado
     @PostMapping("/me/password")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changeOwnPassword(@Valid @RequestBody ChangePasswordRequest request,
+    public ResponseEntity<Void> changeOwnPassword(@Valid @RequestBody ChangePasswordRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        commandService.changeOwnPassword(request, AuthenticatedUser.from(jwt));
+        SessionService.Session session = commandService.changeOwnPassword(request, AuthenticatedUser.from(jwt));
+        return ResponseEntity.noContent().headers(cookies.sessionHeaders(session)).build();
     }
 }
 

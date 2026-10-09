@@ -46,6 +46,12 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
+    @Column(name = "security_stamp", nullable = false)
+    private UUID securityStamp;
+
+    @Column(name = "last_login_at", insertable = false, updatable = false)
+    private Instant lastLoginAt;
+
     protected User() {
     }
 
@@ -53,6 +59,7 @@ public class User {
         this.email = email.trim().toLowerCase();
         this.passwordHash = passwordHash;
         this.fullName = fullName;
+        this.securityStamp = UUID.randomUUID();
     }
 
     public void addRole(Role role) {
@@ -122,5 +129,17 @@ public class User {
 
     public Long getVersion() {
         return version;
+    }
+
+    public void rotateSecurityStamp() {
+        this.securityStamp = UUID.randomUUID();
+    }
+
+    public UUID getSecurityStamp() {
+        return securityStamp;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
     }
 }

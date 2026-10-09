@@ -35,6 +35,10 @@ public enum ErrorCode {
     FILE_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE),
     ATTACHMENT_LIMIT_REACHED(HttpStatus.CONFLICT),
 
+    TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS),
+    CSRF_TOKEN_INVALID(HttpStatus.FORBIDDEN),
+    CONCURRENT_REFRESH(HttpStatus.CONFLICT),
+
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final HttpStatus status;

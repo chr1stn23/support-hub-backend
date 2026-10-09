@@ -4,20 +4,17 @@ import com.chrisdev.supporthub.audit.application.AuditMetadata;
 import com.chrisdev.supporthub.audit.application.AuditService;
 import com.chrisdev.supporthub.audit.domain.AuditAction;
 import com.chrisdev.supporthub.audit.domain.AuditEntityType;
-import com.chrisdev.supporthub.auth.api.LoginResponse;
-import com.chrisdev.supporthub.auth.infrastructure.JwtService;
 import com.chrisdev.supporthub.common.exception.BusinessException;
 import com.chrisdev.supporthub.common.exception.ErrorCode;
 import com.chrisdev.supporthub.common.exception.InvalidCredentialsException;
 import com.chrisdev.supporthub.user.api.UserResponse;
 import com.chrisdev.supporthub.user.domain.User;
 import com.chrisdev.supporthub.user.infrastructure.UserRepository;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -25,31 +22,36 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SessionService sessions;
     private final AuditService auditService;
-    private final JwtService jwtService;
+    private final LoginThrottle throttle;
+    private final JdbcClient jdbc;
     private final String dummyHash;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, AuditService auditService,
-            JwtService jwtService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, SessionService sessions,
+            AuditService auditService, LoginThrottle throttle, JdbcClient jdbc) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.sessions = sessions;
         this.auditService = auditService;
-        this.jwtService = jwtService;
+        this.throttle = throttle;
+        this.jdbc = jdbc;
         // Hash de relleno: si el email no existe igual hacemos una comparación,
         // para que el tiempo de respuesta no delate qué emails existen.
         this.dummyHash = passwordEncoder.encode("dummy-password-for-timing");
     }
 
     @Transactional
-    public LoginResponse login(String email, String rawPassword, String clientIp) {
+    public SessionService.Session login(String email, String rawPassword, String clientIp) {
         String normalizedEmail = email.trim();
-        User user = userRepository.findByEmailIgnoreCase(email.trim()).orElse(null);
+        throttle.check(normalizedEmail, clientIp); // Antes de gastar tiempo en Bcrypt
 
+        User user = userRepository.findByEmailIgnoreCase(email.trim()).orElse(null);
         String hashToCheck = (user != null) ? user.getPasswordHash() : dummyHash;
         boolean passwordMatches = passwordEncoder.matches(rawPassword, hashToCheck);
 
         if (user == null || !passwordMatches || !user.isActive()) {
-            // El motivo real solo queda en la auditoría; al cliente siempre se le dice lo mismo
+            throttle.recordFailure(normalizedEmail, clientIp);
             String reason = user == null ? "UNKNOWN_USER" : !passwordMatches ? "BAD_PASSWORD" : "INACTIVE_USER";
             UUID userId = user == null ? null : user.getId();
             auditService.recordFailure(userId, AuditAction.LOGIN_FAILED, AuditEntityType.USER, userId,
@@ -57,12 +59,24 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
-        JwtService.IssuedToken token = jwtService.issue(user);
+        throttle.reset(normalizedEmail);
+        // Por SQL para que no cuente como una edición de usuario
+        jdbc.sql("UPDATE users SET last_login_at = now() WHERE id = :id").param("id", user.getId()).update();
+
+        SessionService.Session session = sessions.open(user);
         auditService.record(user.getId(), AuditAction.LOGIN_SUCCESS, AuditEntityType.USER, user.getId(),
                 AuditMetadata.of("ip", clientIp));
+        return session;
+    }
 
-        long expiresIn = Duration.between(Instant.now(), token.expiresAt()).toSeconds();
-        return new LoginResponse(token.value(), "Bearer", expiresIn, UserResponse.from(user));
+    @Transactional
+    public SessionService.Session refresh(String rawRefreshToken) {
+        return sessions.rotate(rawRefreshToken);
+    }
+
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        sessions.close(rawRefreshToken);
     }
 
     @Transactional(readOnly = true)

@@ -4,3 +4,8 @@ app:
       secret: test-only-secret-test-only-secret-0123456789
   storage:
     path: ${java.io.tmpdir}/supporthub-test-storage
+  session:
+    cookie-secure: false
+    expose-token-in-body: true
+    throttle:
+      max-failures-per-ip: 1000       # las pruebas hacen muchos logins desde la misma IP

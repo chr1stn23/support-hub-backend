@@ -1,0 +1,4 @@
+app:
+  session:
+    cookie-secure: false              # desarrollo por http://localhost
+    expose-token-in-body: true        # Swagger y curl pueden usar el accessToken

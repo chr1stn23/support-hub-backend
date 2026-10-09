@@ -1,0 +1,6 @@
+# Solo para desarrollar el frontend contra el backend en Docker
+services:
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: local     # crea los usuarios demo y habilita Swagger
+      JWT_SECRET: dev-only-secret-change-me-dev-only-secret-0123456789
